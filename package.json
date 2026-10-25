@@ -1,0 +1,27 @@
+{
+  "name": "geography-quiz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Geographie-Quiz als Web-App (Flaggen, Hauptstädte, Karten, Bundesländer)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build-data": "node scripts/build-data.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Doxmen966/geography-quiz.git"
+  },
+  "dependencies": {
+    "compression": "^1.8.2",
+    "express": "^4.22.3"
+  },
+  "devDependencies": {
+    "d3-geo": "^3.1.1",
+    "flag-icons": "^7.6.0"
+  }
+}

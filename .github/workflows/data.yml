@@ -1,0 +1,33 @@
+# Rebuilds the quiz data incl. Wikipedia pageviews and commits the result.
+name: Daten aktualisieren
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/build-data.mjs
+      - data/difficulty-overrides.json
+      - .github/workflows/data.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/build-data.mjs
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data public/flags
+          git diff --cached --quiet && exit 0
+          git commit -m "Quizdaten aktualisieren"
+          git push

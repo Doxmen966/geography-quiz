@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Geo-Quiz</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <section id="screen-home" class="screen">
+      <header class="hero">
+        <h1>Geo-Quiz</h1>
+        <p>Wähle einen Spielmodus. Du hast 3 Leben.</p>
+      </header>
+      <ul id="mode-list" class="mode-list"></ul>
+      <nav class="footer-links">
+        <button type="button" class="link" data-nav="highscores">Bestenliste</button>
+        <button type="button" class="link" data-nav="about">Über &amp; Quellen</button>
+      </nav>
+    </section>
+
+    <section id="screen-game" class="screen" hidden>
+      <div class="status">
+        <button type="button" class="icon-button" id="quit" aria-label="Spiel beenden">✕</button>
+        <div class="lives" id="lives" aria-label="Leben"></div>
+        <div class="score" id="score">0 Punkte</div>
+      </div>
+      <div class="level" id="level"></div>
+      <div class="question" id="question"></div>
+      <div class="answers" id="answers"></div>
+    </section>
+
+    <section id="screen-over" class="screen" hidden>
+      <header class="hero">
+        <h1 id="over-title">Spiel vorbei</h1>
+        <p class="big-score"><span id="final-score">0</span> <span id="final-unit">Punkte</span></p>
+        <p id="over-mode" class="muted"></p>
+      </header>
+      <form id="save-form" class="save-form" hidden>
+        <label for="player-name">Neuer Eintrag in der Bestenliste! Dein Name:</label>
+        <div class="row">
+          <input id="player-name" name="name" maxlength="20" autocomplete="nickname" required>
+          <button type="submit" class="primary">Speichern</button>
+        </div>
+      </form>
+      <ol id="over-list" class="score-list"></ol>
+      <div class="actions">
+        <button type="button" class="primary" id="again">Nochmal spielen</button>
+        <button type="button" class="secondary" data-nav="home">Zum Menü</button>
+      </div>
+    </section>
+
+    <section id="screen-highscores" class="screen" hidden>
+      <header class="bar">
+        <button type="button" class="icon-button" data-nav="home" aria-label="Zurück">←</button>
+        <h2>Bestenliste</h2>
+      </header>
+      <div class="tabs" id="score-tabs" role="tablist"></div>
+      <ol id="score-list" class="score-list"></ol>
+    </section>
+
+    <section id="screen-about" class="screen" hidden>
+      <header class="bar">
+        <button type="button" class="icon-button" data-nav="home" aria-label="Zurück">←</button>
+        <h2>Über &amp; Quellen</h2>
+      </header>
+      <div class="prose">
+        <p>Alle Daten stammen aus öffentlichen Quellen und sind lokal in der App gespeichert.</p>
+        <ul>
+          <li><strong>Länder, Hauptstädte, deutsche Namen:</strong> <a href="https://github.com/mledoze/countries">mledoze/countries</a>, Lizenz <a href="https://opendatacommons.org/licenses/odbl/1-0/">ODbL 1.0</a>.</li>
+          <li><strong>Flaggen:</strong> <a href="https://github.com/lipis/flag-icons">flag-icons</a> von Panayiotis Lipiridis, Lizenz MIT.</li>
+          <li><strong>Karten, Einwohnerzahlen, deutsche Städtenamen, Bundesländer:</strong> <a href="https://www.naturalearthdata.com/">Natural Earth</a>, gemeinfrei.</li>
+          <li><strong>Bekanntheit (Schwierigkeitsgrad):</strong> Seitenaufrufe der deutschsprachigen Wikipedia über die <a href="https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/">Wikimedia Pageviews API</a> und <a href="https://www.wikidata.org/">Wikidata</a> (CC0).</li>
+        </ul>
+        <p id="data-meta" class="muted"></p>
+      </div>
+    </section>
+  </main>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
