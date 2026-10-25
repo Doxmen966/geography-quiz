@@ -15,6 +15,7 @@
   <main id="app">
     <section id="screen-home" class="screen">
       <header class="hero">
+        <button type="button" class="icon-button sound-toggle home-sound"></button>
         <h1>Geo-Quiz</h1>
         <p>Wähle einen Spielmodus. Du hast 3 Leben.</p>
       </header>
@@ -29,7 +30,10 @@
       <div class="status">
         <button type="button" class="icon-button" id="quit" aria-label="Spiel beenden">✕</button>
         <div class="lives" id="lives" aria-label="Leben"></div>
-        <div class="score" id="score">0 Punkte</div>
+        <div class="status-end">
+          <div class="score" id="score">0 Punkte</div>
+          <button type="button" class="icon-button sound-toggle"></button>
+        </div>
       </div>
       <div class="level" id="level"></div>
       <div class="question" id="question"></div>
@@ -77,6 +81,7 @@
           <li><strong>Flaggen:</strong> <a href="https://github.com/lipis/flag-icons">flag-icons</a> von Panayiotis Lipiridis, Lizenz MIT.</li>
           <li><strong>Karten, Einwohnerzahlen, deutsche Städtenamen, Bundesländer:</strong> <a href="https://www.naturalearthdata.com/">Natural Earth</a>, gemeinfrei.</li>
           <li><strong>Bekanntheit (Schwierigkeitsgrad):</strong> Seitenaufrufe der deutschsprachigen Wikipedia über die <a href="https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/">Wikimedia Pageviews API</a> und <a href="https://www.wikidata.org/">Wikidata</a> (CC0).</li>
+          <li><strong>Soundeffekte:</strong> eigens für diese App im Browser mit der <a href="https://developer.mozilla.org/de/docs/Web/API/Web_Audio_API">Web Audio API</a> synthetisiert, keine Audiodateien oder fremden Aufnahmen.</li>
         </ul>
         <p id="data-meta" class="muted"></p>
       </div>

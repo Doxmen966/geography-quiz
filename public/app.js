@@ -1,3 +1,5 @@
+import { play, isMuted, setMuted } from './sound.js';
+
 const LIVES = 3;
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const DIFFICULTY_LABEL = { easy: 'Leicht', medium: 'Mittel', hard: 'Schwer' };
@@ -178,10 +180,19 @@ function distractors(game, item) {
 }
 
 async function startGame(mode) {
-  game = { mode, items: await itemsFor(mode), used: new Set(), lives: LIVES, score: 0, answered: 0, startedAt: Date.now(), locked: false };
+  game = { mode, items: await itemsFor(mode), used: new Set(), lives: LIVES, score: 0, answered: 0, startedAt: Date.now(), locked: false, best: null, record: false };
+  // The current #1 of this mode; beating it during the run plays the record sound.
+  const current = game;
+  fetchScores().then((scores) => { current.best = scores[mode.id]?.[0]?.score ?? 0; }).catch(() => {});
   show('game');
   renderStatus();
   await nextQuestion();
+}
+
+function celebrate() {
+  const level = $('level');
+  level.dataset.level = 'record';
+  level.textContent = '🏆 Neuer Rekord!';
 }
 
 function renderStatus() {
@@ -226,9 +237,19 @@ function answer(choice, button) {
   }
   if (correct) {
     game.score += 1;
+    // With no previous entries every score would be a "record", so a first
+    // run only gets the fanfare at game over.
+    if (!game.record && game.best > 0 && game.score > game.best) {
+      game.record = true;
+      play('record');
+      celebrate();
+    } else {
+      play('correct');
+    }
   } else {
     button.classList.add('wrong');
     game.lives -= 1;
+    play('wrong');
     navigator.vibrate?.(150);
   }
   renderStatus();
@@ -293,6 +314,11 @@ async function endGame(completed) {
     return;
   }
   renderScoreList(list, $('over-list'));
+  if (finished.score > 0 && finished.score > (list[0]?.score ?? 0)) {
+    $('over-title').textContent = 'Neuer Rekord! 🏆';
+    if (!finished.record) play('record');
+    finished.record = true;
+  }
   const qualifies = finished.score > 0 && (list.length < 10 || finished.score > list[list.length - 1].score);
   if (!qualifies) return;
 
@@ -371,7 +397,23 @@ function navigate(target) {
   show(target);
 }
 
+function renderSoundToggles() {
+  for (const b of document.querySelectorAll('.sound-toggle')) {
+    b.textContent = isMuted() ? '🔇' : '🔊';
+    b.setAttribute('aria-label', isMuted() ? 'Ton einschalten' : 'Ton ausschalten');
+    b.setAttribute('aria-pressed', String(isMuted()));
+  }
+}
+
 function init() {
+  renderSoundToggles();
+  for (const b of document.querySelectorAll('.sound-toggle')) {
+    b.addEventListener('click', () => {
+      setMuted(!isMuted());
+      renderSoundToggles();
+      play('correct'); // short preview when switching on
+    });
+  }
   $('mode-list').replaceChildren(
     ...MODES.map((mode) => {
       const button = el('button', { type: 'button' }, el('span', { className: 'mode-icon', textContent: mode.icon }), el('span', {}, mode.title, el('small', { textContent: mode.hint })));

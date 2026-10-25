@@ -53,7 +53,8 @@ html, body {
 button { font: inherit; color: inherit; cursor: pointer; }
 .muted { color: var(--muted); }
 
-.hero { text-align: center; padding: 12px 0 4px; }
+.hero { text-align: center; padding: 12px 0 4px; position: relative; }
+.home-sound { position: absolute; top: 0; right: 0; }
 .hero h1 { margin: 0 0 4px; font-size: 2rem; }
 .hero p { margin: 0; }
 
@@ -81,6 +82,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lives { font-size: 1.5rem; letter-spacing: 2px; }
 .score { font-weight: 700; font-size: 1.1rem; }
+.status-end { display: flex; align-items: center; gap: 10px; }
 .icon-button {
   background: var(--card);
   border: 1px solid var(--border);
@@ -94,6 +96,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .level[data-level="easy"]::before { content: "● "; color: var(--correct); }
 .level[data-level="medium"]::before { content: "● "; color: #f59e0b; }
 .level[data-level="hard"]::before { content: "● "; color: var(--wrong); }
+.level[data-level="record"] { color: #d97706; font-weight: 700; }
 
 .question {
   background: var(--card);
