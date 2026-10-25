@@ -53,7 +53,8 @@ html, body {
 button { font: inherit; color: inherit; cursor: pointer; }
 .muted { color: var(--muted); }
 
-.hero { text-align: center; padding: 12px 0 4px; }
+.hero { text-align: center; padding: 12px 0 4px; position: relative; }
+.home-sound { position: absolute; top: 0; right: 0; }
 .hero h1 { margin: 0 0 4px; font-size: 2rem; }
 .hero p { margin: 0; }
 
@@ -81,6 +82,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lives { font-size: 1.5rem; letter-spacing: 2px; }
 .score { font-weight: 700; font-size: 1.1rem; }
+.status-end { display: flex; align-items: center; gap: 10px; }
 .icon-button {
   background: var(--card);
   border: 1px solid var(--border);
@@ -94,6 +96,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .level[data-level="easy"]::before { content: "● "; color: var(--correct); }
 .level[data-level="medium"]::before { content: "● "; color: #f59e0b; }
 .level[data-level="hard"]::before { content: "● "; color: var(--wrong); }
+.timer { display: flex; align-items: center; gap: 10px; margin-top: -8px; }
+.timer-track { flex: 1; height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.timer-bar { height: 100%; background: var(--primary); transform-origin: left; }
+.timer.urgent .timer-bar { background: var(--wrong); }
+.timer-text { min-width: 3.2em; text-align: right; font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.timer.urgent .timer-text { color: var(--wrong); }
+.level[data-level="record"] { color: #d97706; font-weight: 700; }
 
 .question {
   background: var(--card);
@@ -110,7 +119,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .question .prompt-label { color: var(--muted); font-size: 0.9rem; }
 .question .prompt-text { font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
-.question .flag { width: 100%; max-width: 300px; max-height: 32dvh; aspect-ratio: 4 / 3; object-fit: contain; filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.25)); }
+.question .flag { width: 100%; max-width: 300px; max-height: 32dvh; aspect-ratio: 4 / 3; object-fit: contain; }
 .question .map { width: 100%; max-height: 42dvh; border-radius: 10px; background: var(--water); display: block; }
 .question .map.germany { background: transparent; max-height: 36dvh; }
 .map path { fill: var(--land); stroke: var(--land-stroke); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
@@ -131,7 +140,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .answers.flags button { padding: 8px; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
 .answers.flags img { width: 100%; height: 100%; object-fit: contain; }
-.answers button:disabled { cursor: default; }
+/* Hairline edge so white stripes don't merge into the white card (Austria, Singapore, ...). */
+.flag { filter: drop-shadow(0 0 0.5px rgb(0 0 0 / 0.6)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.2)); }
+/* iOS Safari greys out the content of disabled buttons, which made flags look discoloured. */
+.answers button:disabled { cursor: default; opacity: 1; color: inherit; -webkit-text-fill-color: currentColor; }
 .answers button.correct { border-color: var(--correct); background: color-mix(in srgb, var(--correct) 18%, var(--card)); }
 .answers button.wrong { border-color: var(--wrong); background: color-mix(in srgb, var(--wrong) 18%, var(--card)); }
 

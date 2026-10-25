@@ -1,6 +1,9 @@
+import { play, isMuted, setMuted } from './sound.js';
+
 const LIVES = 3;
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const DIFFICULTY_LABEL = { easy: 'Leicht', medium: 'Mittel', hard: 'Schwer' };
+const QUESTION_SECONDS = 10;
 // How many questions a run stays on a level before moving up, per data set.
 const LEVEL_STEPS = { countries: [10, 25], states: [6, 11] };
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -178,10 +181,19 @@ function distractors(game, item) {
 }
 
 async function startGame(mode) {
-  game = { mode, items: await itemsFor(mode), used: new Set(), lives: LIVES, score: 0, answered: 0, startedAt: Date.now(), locked: false };
+  game = { mode, items: await itemsFor(mode), used: new Set(), lives: LIVES, score: 0, answered: 0, startedAt: Date.now(), locked: false, best: null, record: false };
+  // The current #1 of this mode; beating it during the run plays the record sound.
+  const current = game;
+  fetchScores().then((scores) => { current.best = scores[mode.id]?.[0]?.score ?? 0; }).catch(() => {});
   show('game');
   renderStatus();
   await nextQuestion();
+}
+
+function celebrate() {
+  const level = $('level');
+  level.dataset.level = 'record';
+  level.textContent = '🏆 Neuer Rekord!';
 }
 
 function renderStatus() {
@@ -213,12 +225,34 @@ async function nextQuestion() {
       return button;
     }),
   );
+  startTimer();
+}
+
+// Countdown per question; running out counts as a wrong answer.
+function startTimer() {
+  const current = game;
+  const deadline = performance.now() + QUESTION_SECONDS * 1000;
+  const bar = $('timer-bar');
+  const text = $('timer-text');
+  const timer = $('timer');
+  const tick = () => {
+    if (game !== current || current.locked) return;
+    const left = Math.max(0, deadline - performance.now());
+    bar.style.transform = `scaleX(${left / (QUESTION_SECONDS * 1000)})`;
+    text.textContent = `${Math.ceil(left / 1000)} s`;
+    timer.classList.toggle('urgent', left <= 3000);
+    if (left === 0) answer(null, null);
+    else current.timer = requestAnimationFrame(tick);
+  };
+  cancelAnimationFrame(current.timer);
+  tick();
 }
 
 function answer(choice, button) {
   if (game.locked) return;
   game.locked = true;
-  const correct = choice.id === game.current.id;
+  cancelAnimationFrame(game.timer);
+  const correct = choice?.id === game.current.id;
   game.answered += 1;
   for (const b of $('answers').children) {
     b.disabled = true;
@@ -226,9 +260,20 @@ function answer(choice, button) {
   }
   if (correct) {
     game.score += 1;
+    // With no previous entries every score would be a "record", so a first
+    // run only gets the fanfare at game over.
+    if (!game.record && game.best > 0 && game.score > game.best) {
+      game.record = true;
+      play('record');
+      celebrate();
+    } else {
+      play('correct');
+    }
   } else {
-    button.classList.add('wrong');
+    button?.classList.add('wrong');
+    if (!choice) $('timer-text').textContent = 'Zeit abgelaufen';
     game.lives -= 1;
+    play('wrong');
     navigator.vibrate?.(150);
   }
   renderStatus();
@@ -293,6 +338,11 @@ async function endGame(completed) {
     return;
   }
   renderScoreList(list, $('over-list'));
+  if (finished.score > 0 && finished.score > (list[0]?.score ?? 0)) {
+    $('over-title').textContent = 'Neuer Rekord! 🏆';
+    if (!finished.record) play('record');
+    finished.record = true;
+  }
   const qualifies = finished.score > 0 && (list.length < 10 || finished.score > list[list.length - 1].score);
   if (!qualifies) return;
 
@@ -371,7 +421,23 @@ function navigate(target) {
   show(target);
 }
 
+function renderSoundToggles() {
+  for (const b of document.querySelectorAll('.sound-toggle')) {
+    b.textContent = isMuted() ? '🔇' : '🔊';
+    b.setAttribute('aria-label', isMuted() ? 'Ton einschalten' : 'Ton ausschalten');
+    b.setAttribute('aria-pressed', String(isMuted()));
+  }
+}
+
 function init() {
+  renderSoundToggles();
+  for (const b of document.querySelectorAll('.sound-toggle')) {
+    b.addEventListener('click', () => {
+      setMuted(!isMuted());
+      renderSoundToggles();
+      play('correct'); // short preview when switching on
+    });
+  }
   $('mode-list').replaceChildren(
     ...MODES.map((mode) => {
       const button = el('button', { type: 'button' }, el('span', { className: 'mode-icon', textContent: mode.icon }), el('span', {}, mode.title, el('small', { textContent: mode.hint })));
