@@ -3,6 +3,7 @@ import { play, isMuted, setMuted } from './sound.js';
 const LIVES = 3;
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const DIFFICULTY_LABEL = { easy: 'Leicht', medium: 'Mittel', hard: 'Schwer' };
+const QUESTION_SECONDS = 10;
 // How many questions a run stays on a level before moving up, per data set.
 const LEVEL_STEPS = { countries: [10, 25], states: [6, 11] };
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -224,12 +225,34 @@ async function nextQuestion() {
       return button;
     }),
   );
+  startTimer();
+}
+
+// Countdown per question; running out counts as a wrong answer.
+function startTimer() {
+  const current = game;
+  const deadline = performance.now() + QUESTION_SECONDS * 1000;
+  const bar = $('timer-bar');
+  const text = $('timer-text');
+  const timer = $('timer');
+  const tick = () => {
+    if (game !== current || current.locked) return;
+    const left = Math.max(0, deadline - performance.now());
+    bar.style.transform = `scaleX(${left / (QUESTION_SECONDS * 1000)})`;
+    text.textContent = `${Math.ceil(left / 1000)} s`;
+    timer.classList.toggle('urgent', left <= 3000);
+    if (left === 0) answer(null, null);
+    else current.timer = requestAnimationFrame(tick);
+  };
+  cancelAnimationFrame(current.timer);
+  tick();
 }
 
 function answer(choice, button) {
   if (game.locked) return;
   game.locked = true;
-  const correct = choice.id === game.current.id;
+  cancelAnimationFrame(game.timer);
+  const correct = choice?.id === game.current.id;
   game.answered += 1;
   for (const b of $('answers').children) {
     b.disabled = true;
@@ -247,7 +270,8 @@ function answer(choice, button) {
       play('correct');
     }
   } else {
-    button.classList.add('wrong');
+    button?.classList.add('wrong');
+    if (!choice) $('timer-text').textContent = 'Zeit abgelaufen';
     game.lives -= 1;
     play('wrong');
     navigator.vibrate?.(150);
