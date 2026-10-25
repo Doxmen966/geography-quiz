@@ -26,13 +26,24 @@ const SOURCES = {
   places: `${NE}/ne_10m_populated_places.geojson`,
 };
 
+// Retries rate-limited and temporary server errors with backoff (Wikimedia answers 429 when busy).
+async function get(url, attempts = 6) {
+  for (let i = 1; ; i++) {
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    if (res.ok || i === attempts || (res.status !== 429 && res.status < 500)) return res;
+    const wait = Number(res.headers.get('retry-after')) * 1000 || 1000 * 2 ** i;
+    console.log(`HTTP ${res.status} for ${url}, retrying in ${wait / 1000}s`);
+    await new Promise((r) => setTimeout(r, wait));
+  }
+}
+
 async function cached(name, url) {
   const file = path.join(CACHE, name);
   try {
     return JSON.parse(await fs.readFile(file, 'utf8'));
   } catch {
     console.log(`download ${url}`);
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await get(url);
     if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
     const text = await res.text();
     await fs.mkdir(CACHE, { recursive: true });
@@ -65,7 +76,7 @@ async function dewikiTitles(qids) {
   for (let i = 0; i < qids.length; i += 50) {
     const ids = qids.slice(i, i + 50).join('|');
     const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&sitefilter=dewiki&ids=${ids}`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await get(url);
     if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
     const { entities } = await res.json();
     for (const [qid, e] of Object.entries(entities)) {
@@ -83,7 +94,7 @@ async function pageviews(title) {
   const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '') + '00';
   const article = encodeURIComponent(title.replace(/ /g, '_'));
   const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/de.wikipedia/all-access/user/${article}/monthly/${fmt(start)}/${fmt(end)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await get(url);
   if (!res.ok) throw new Error(`Pageviews ${title}: HTTP ${res.status}`);
   const { items } = await res.json();
   return items.reduce((sum, item) => sum + item.views, 0);
@@ -96,7 +107,7 @@ async function popularity(qids) {
   for (const qid of qids) {
     if (!titles[qid]) continue;
     views[qid] = await pageviews(titles[qid]);
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
   }
   return views;
 }
