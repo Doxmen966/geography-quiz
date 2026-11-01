@@ -6,7 +6,7 @@ import compression from 'compression';
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.resolve('storage');
 const SCORES_FILE = path.join(DATA_DIR, 'highscores.json');
-const MODES = ['flag-to-country', 'country-to-flag', 'country-to-capital', 'map-to-country', 'state-to-capital', 'germany-map-to-state'];
+const MODES = ['flag-to-country', 'country-to-flag', 'country-to-capital', 'map-to-country', 'country-to-map', 'state-to-capital', 'germany-map-to-state'];
 const TOP = 10;
 
 async function loadScores() {

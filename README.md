@@ -8,10 +8,11 @@ Eine Web-App mit Geographie-Quizzes, optimiert fürs Smartphone und gedacht für
 - Land → Flagge
 - Land → Hauptstadt
 - Karte → Land
+- Land → Karte (Land auf einer Weltkarte mit Wischen und Zoomen antippen)
 - Bundesland → Landeshauptstadt
 - Deutschlandkarte → Bundesland
 
-Jedes Spiel beginnt mit 3 Leben. Pro Frage gibt es 4 Antworten, eine falsche Antwort kostet ein Leben. Die Fragen beginnen leicht und werden im Laufe des Spiels schwerer. Pro Modus werden die besten 10 Runs mit Name, Datum, Anzahl Fragen und Dauer gespeichert.
+Jedes Spiel beginnt mit 3 Leben. Pro Frage gibt es 4 Antworten und 10 Sekunden Zeit (bei „Land → Karte“ wird stattdessen auf der Karte getippt, mit 20 Sekunden), eine falsche Antwort kostet ein Leben. Die Fragen beginnen leicht und werden im Laufe des Spiels schwerer. Pro Modus werden die besten 10 Runs mit Name, Datum, Anzahl Fragen und Dauer gespeichert.
 
 ## Installation auf Unraid
 
