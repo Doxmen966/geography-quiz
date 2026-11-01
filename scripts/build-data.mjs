@@ -138,24 +138,24 @@ function ensureViewBox(svg) {
 }
 
 async function buildFlags(quiz) {
-  // 1. Flag file names from Wikidata (property P41 "flag image").
+  // 1. Flag file names from Wikidata (property P41 "flag image"). One request per country:
+  //    wbgetentities with many full country entities exceeds the API's result size limit.
   const files = {};
-  for (let i = 0; i < quiz.length; i += 50) {
-    const batch = quiz.slice(i, i + 50);
-    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims&ids=${batch.map((c) => c.wikidata).join('|')}`;
-    const res = await get(url);
-    if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
-    const { entities } = await res.json();
-    for (const c of batch) {
-      const iso = entities[c.wikidata]?.claims?.P297?.[0]?.mainsnak.datavalue?.value;
-      if (iso && iso.toLowerCase() !== c.iso2) throw new Error(`${c.id}: Wikidata ${c.wikidata} has ISO code ${iso}`);
-      const file = currentFlag(entities[c.wikidata] ?? {});
-      if (!file?.toLowerCase().endsWith('.svg')) {
-        console.error(JSON.stringify(entities[c.wikidata]?.claims?.P41 ?? entities[c.wikidata] ?? null).slice(0, 4000));
-        throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
-      }
-      files[c.iso2] = file;
+  for (const c of quiz) {
+    const claims = {};
+    for (const property of ['P41', 'P297']) {
+      const res = await get(`https://www.wikidata.org/w/api.php?action=wbgetclaims&format=json&entity=${c.wikidata}&property=${property}`);
+      if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
+      Object.assign(claims, (await res.json()).claims);
     }
+    const iso = claims.P297?.[0]?.mainsnak.datavalue?.value;
+    if (iso && iso.toLowerCase() !== c.iso2) throw new Error(`${c.id}: Wikidata ${c.wikidata} has ISO code ${iso}`);
+    const file = currentFlag({ claims });
+    if (!file?.toLowerCase().endsWith('.svg')) {
+      console.error(JSON.stringify(claims.P41 ?? null).slice(0, 4000));
+      throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
+    }
+    files[c.iso2] = file;
   }
 
   // 2. Download URL, licence and author from the Commons API.
