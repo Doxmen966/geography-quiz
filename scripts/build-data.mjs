@@ -131,11 +131,11 @@ function ensureViewBox(svg) {
   return svg.replace(/<svg\b[^>]*>/, (tag) => {
     if (/\sviewBox=/.test(tag)) return tag;
     // Only the ratio matters, so units (px, pt, mm, ...) can be dropped as long as both use the same.
-    const size = (attr) => tag.match(new RegExp(`\\s${attr}=["']\\s*([\\d.]+)\\s*([a-z]*)\\s*["']`));
+    const size = (attr) => tag.match(new RegExp(`\\s${attr}=["']\\s*([\\d.]+(?:e[+-]?\\d+)?)\\s*([a-z]*)\\s*["']`, 'i'));
     const [, w, wu] = size('width') ?? [];
     const [, h, hu] = size('height') ?? [];
     if (!w || !h || wu !== hu) throw new Error(`SVG without viewBox and usable size: ${tag.slice(0, 300)}`);
-    return tag.replace('<svg', `<svg viewBox="0 0 ${w} ${h}"`);
+    return tag.replace('<svg', `<svg viewBox="0 0 ${Number(w)} ${Number(h)}"`);
   });
 }
 
