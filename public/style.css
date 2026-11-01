@@ -119,7 +119,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .question .prompt-label { color: var(--muted); font-size: 0.9rem; }
 .question .prompt-text { font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
-.question .flag { width: 100%; max-width: 300px; max-height: 32dvh; aspect-ratio: 4 / 3; object-fit: contain; }
+/* Flags keep their official aspect ratio; the box only limits the size. */
+.question .flag { width: 100%; max-width: 300px; height: auto; max-height: 32dvh; object-fit: contain; }
 .question .map { width: 100%; max-height: 42dvh; border-radius: 10px; background: var(--water); display: block; }
 .question .map.germany { background: transparent; max-height: 36dvh; }
 .map path { fill: var(--land); stroke: var(--land-stroke); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
@@ -138,7 +139,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-weight: 600;
   transition: background 0.15s, border-color 0.15s;
 }
-.answers.flags button { padding: 8px; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
+.answers.flags button { padding: 8px; aspect-ratio: 3 / 2; display: flex; align-items: center; justify-content: center; }
 .answers.flags img { width: 100%; height: 100%; object-fit: contain; }
 /* Hairline edge so white stripes don't merge into the white card (Austria, Singapore, ...). */
 .flag { filter: drop-shadow(0 0 0.5px rgb(0 0 0 / 0.6)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.2)); }
@@ -214,3 +215,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .prose a { color: var(--primary); }
 .prose ul { padding-left: 1.2rem; }
 .prose li { margin-bottom: 8px; }
+.prose details { margin: 4px 0 8px; }
+.prose summary { cursor: pointer; color: var(--primary); }
+.flag-credits { list-style: none; padding: 0 !important; font-size: 0.85rem; }
+.flag-credits li { margin-bottom: 4px; }

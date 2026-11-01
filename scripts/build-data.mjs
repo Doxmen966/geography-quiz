@@ -1,16 +1,16 @@
 // Builds the quiz data in public/data and public/flags from public sources.
 //
 //   node scripts/build-data.mjs            fetch everything, incl. Wikipedia pageviews
-//   node scripts/build-data.mjs --offline  skip Wikimedia (difficulty from population only)
+//   node scripts/build-data.mjs --offline  skip Wikimedia (difficulty from population only,
+//                                          flags in public/flags are left as they are)
 //
 // Downloads are cached in .cache/ so repeated runs are fast.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { optimize } from 'svgo';
 import { geoEqualEarth, geoMercator, geoPath, geoArea } from 'd3-geo';
 
-const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const CACHE = path.join(ROOT, '.cache');
 const OUT = path.join(ROOT, 'public', 'data');
@@ -110,6 +110,102 @@ async function popularity(qids) {
     await new Promise((r) => setTimeout(r, 100));
   }
   return views;
+}
+
+// --- Flags (Wikimedia Commons via Wikidata) ------------------------------
+
+// Current flag file of a Wikidata item: preferred rank first, statements with an end date skipped.
+function currentFlag(entity) {
+  const claims = (entity.claims?.P41 ?? []).filter((c) => c.rank !== 'deprecated' && c.mainsnak.datavalue && !c.qualifiers?.P582);
+  const best = claims.find((c) => c.rank === 'preferred') ?? claims[0];
+  return best?.mainsnak.datavalue.value;
+}
+
+const stripHtml = (s = '') => s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+// Commons SVGs sometimes only carry width/height; a viewBox lets the browser scale them to any size.
+function ensureViewBox(svg) {
+  return svg.replace(/<svg\b[^>]*>/, (tag) => {
+    if (/\sviewBox=/.test(tag)) return tag;
+    const w = tag.match(/\swidth="([\d.]+)(px)?"/)?.[1];
+    const h = tag.match(/\sheight="([\d.]+)(px)?"/)?.[1];
+    if (!w || !h) throw new Error('SVG without viewBox and size');
+    return tag.replace('<svg', `<svg viewBox="0 0 ${w} ${h}"`);
+  });
+}
+
+async function buildFlags(quiz) {
+  // 1. Flag file names from Wikidata (property P41 "flag image").
+  const files = {};
+  for (let i = 0; i < quiz.length; i += 50) {
+    const batch = quiz.slice(i, i + 50);
+    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims&ids=${batch.map((c) => c.wikidata).join('|')}`;
+    const res = await get(url);
+    if (!res.ok) throw new Error(`Wikidata: HTTP ${res.status}`);
+    const { entities } = await res.json();
+    for (const c of batch) {
+      const iso = entities[c.wikidata]?.claims?.P297?.[0]?.mainsnak.datavalue?.value;
+      if (iso && iso.toLowerCase() !== c.iso2) throw new Error(`${c.id}: Wikidata ${c.wikidata} has ISO code ${iso}`);
+      const file = currentFlag(entities[c.wikidata] ?? {});
+      if (!file?.toLowerCase().endsWith('.svg')) throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
+      files[c.iso2] = file;
+    }
+  }
+
+  // 2. Download URL, licence and author from the Commons API.
+  const info = {};
+  const names = Object.values(files);
+  for (let i = 0; i < names.length; i += 50) {
+    const titles = names.slice(i, i + 50).map((f) => `File:${f}`).join('|');
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo&iiprop=url|extmetadata&iiextmetadatafilter=LicenseShortName|Artist&titles=${encodeURIComponent(titles)}`;
+    const res = await get(url);
+    if (!res.ok) throw new Error(`Commons: HTTP ${res.status}`);
+    const { query } = await res.json();
+    const title = (t) => t.replace(/^File:/, '').replace(/_/g, ' ');
+    const normalized = Object.fromEntries((query.normalized ?? []).map((n) => [title(n.to), title(n.from)]));
+    for (const page of query.pages) {
+      const ii = page.imageinfo?.[0];
+      if (!ii) throw new Error(`Commons: ${page.title} not found`);
+      const name = title(page.title);
+      const meta = ii.extmetadata ?? {};
+      info[normalized[name] ?? name] = {
+        url: ii.url,
+        page: ii.descriptionurl,
+        license: stripHtml(meta.LicenseShortName?.value) || 'unbekannt',
+        artist: stripHtml(meta.Artist?.value) || null,
+      };
+    }
+  }
+
+  // 3. Download (cached), optimise and write the SVGs.
+  await fs.mkdir(path.join(CACHE, 'flags'), { recursive: true });
+  await fs.rm(FLAGS_OUT, { recursive: true, force: true });
+  await fs.mkdir(FLAGS_OUT, { recursive: true });
+  const credits = {};
+  for (const [iso2, file] of Object.entries(files)) {
+    const meta = info[file] ?? info[file.replace(/_/g, ' ')];
+    if (!meta) throw new Error(`Commons: no info for ${file}`);
+    const cacheFile = path.join(CACHE, 'flags', `${iso2}.svg`);
+    let svg;
+    try {
+      const cachedMeta = JSON.parse(await fs.readFile(`${cacheFile}.json`, 'utf8'));
+      if (cachedMeta.url !== meta.url) throw new Error('stale');
+      svg = await fs.readFile(cacheFile, 'utf8');
+    } catch {
+      console.log(`download ${meta.url}`);
+      const res = await get(meta.url);
+      if (!res.ok) throw new Error(`${meta.url}: HTTP ${res.status}`);
+      svg = await res.text();
+      await fs.writeFile(cacheFile, svg);
+      await fs.writeFile(`${cacheFile}.json`, JSON.stringify({ url: meta.url }));
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const { data } = optimize(ensureViewBox(svg), { multipass: true, plugins: ['preset-default'] });
+    await fs.writeFile(path.join(FLAGS_OUT, `${iso2}.svg`), data);
+    credits[iso2] = { file, page: meta.page, license: meta.license, artist: meta.artist };
+  }
+  await fs.mkdir(OUT, { recursive: true });
+  await fs.writeFile(path.join(OUT, 'flags.json'), JSON.stringify(credits, null, 1));
 }
 
 // --- Geometry ------------------------------------------------------------
@@ -217,10 +313,7 @@ async function main() {
   assignDifficulty(bundeslaender, overrides.bundeslaender);
 
   // Flags
-  const flagDir = path.join(path.dirname(require.resolve('flag-icons/package.json')), 'flags', '4x3');
-  await fs.rm(FLAGS_OUT, { recursive: true, force: true });
-  await fs.mkdir(FLAGS_OUT, { recursive: true });
-  for (const c of quiz) await fs.copyFile(path.join(flagDir, `${c.iso2}.svg`), path.join(FLAGS_OUT, `${c.iso2}.svg`));
+  if (!OFFLINE) await buildFlags(quiz);
 
   // Output
   const write = (name, data) => fs.writeFile(path.join(OUT, name), JSON.stringify(data, null, name === 'world.json' || name === 'germany.json' ? 0 : 1));
