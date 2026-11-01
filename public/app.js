@@ -409,6 +409,25 @@ function show(name) {
   window.scrollTo(0, 0);
 }
 
+async function renderFlagCredits() {
+  const list = document.querySelector('#flag-credits ul');
+  if (list.childElementCount) return;
+  try {
+    const [credits, countries] = await Promise.all([load('flags'), load('countries')]);
+    for (const c of countries) {
+      const credit = credits[c.iso2];
+      if (!credit) continue;
+      const link = el('a', { href: credit.page, target: '_blank', rel: 'noopener' });
+      link.textContent = credit.file;
+      const li = el('li');
+      li.append(`${c.name}: `, link, `, ${credit.license}${credit.artist ? `, ${credit.artist}` : ''}`);
+      list.append(li);
+    }
+  } catch {
+    document.getElementById('flag-credits').hidden = true;
+  }
+}
+
 function navigate(target) {
   if (target === 'highscores') return showHighscores();
   if (target === 'about') {
@@ -417,6 +436,7 @@ function navigate(target) {
       const how = meta.difficultyMethod === 'pageviews' ? 'Wikipedia-Seitenaufrufe und Einwohnerzahl' : 'Einwohnerzahl';
       $('data-meta').textContent = `Datenstand: ${date}. Schwierigkeitsgrad berechnet aus: ${how}.`;
     }).catch(() => {});
+    renderFlagCredits();
   }
   show(target);
 }

@@ -47,7 +47,7 @@ Alle Daten stammen aus öffentlichen Quellen und werden mit dem Image ausgeliefe
 | Inhalt | Quelle | Lizenz |
 | --- | --- | --- |
 | Länder, Hauptstädte, deutsche Ländernamen | [mledoze/countries](https://github.com/mledoze/countries) | ODbL 1.0 |
-| Flaggen | [flag-icons](https://github.com/lipis/flag-icons) | MIT |
+| Flaggen | [Wikimedia Commons](https://commons.wikimedia.org/) über Wikidata (P41), offizielles Seitenverhältnis | meist gemeinfrei, Einzelnachweise in `public/data/flags.json` |
 | Weltkarte, Bundesländer, Einwohnerzahlen, deutsche Städtenamen | [Natural Earth](https://www.naturalearthdata.com/) | gemeinfrei |
 | Bekanntheit für den Schwierigkeitsgrad | Wikipedia-Seitenaufrufe (de) über [Wikimedia Pageviews API](https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/) und [Wikidata](https://www.wikidata.org/) | CC0 |
 
@@ -71,7 +71,7 @@ Die Schlüssel sind ISO-3166-Codes (Länder: alpha-3, Bundesländer: `DE-xx`).
 ```bash
 npm ci
 npm run build-data             # mit Wikipedia-Seitenaufrufen
-npm run build-data -- --offline  # ohne Wikimedia, Schwierigkeit nur nach Einwohnerzahl
+npm run build-data -- --offline  # ohne Wikimedia: Schwierigkeit nur nach Einwohnerzahl, Flaggen bleiben unverändert
 ```
 
 Die GitHub Action **Daten aktualisieren** führt das Skript bei Änderungen am Skript oder an den Overrides automatisch aus und committet das Ergebnis. Sie lässt sich auch manuell starten.
