@@ -173,7 +173,29 @@ async function pickerMap() {
     el('button', { type: 'button', className: 'icon-button', textContent: '−', ariaLabel: 'Herauszoomen', onclick: () => zoomBy(2) }),
     el('button', { type: 'button', className: 'icon-button', textContent: '⤢', ariaLabel: 'Ganze Welt zeigen', onclick: () => animateTo(fullView()) }),
   );
-  const node = el('div', { className: 'pick-map' }, svg, zoomButtons);
+  // A tap only selects; OK (or the timer running out) checks the selection,
+  // so a slip of the finger doesn't cost a life.
+  const confirmButton = el('button', { type: 'button', className: 'primary confirm', textContent: 'OK', disabled: true, onclick: () => confirmSelection() });
+  const hint = el('div', { className: 'pick-hint', textContent: 'Land antippen, dann mit OK bestätigen' });
+  const node = el('div', { className: 'pick-wrap' }, el('div', { className: 'pick-map' }, svg, zoomButtons), el('div', { className: 'pick-actions' }, hint, confirmButton));
+  let selected = null;
+  function select(id) {
+    for (const n of svg.querySelectorAll('.selected')) n.classList.remove('selected');
+    selected = id;
+    if (id) {
+      for (const n of svg.querySelectorAll(`[data-id="${id}"]`)) {
+        n.classList.add('selected');
+        n.parentNode.appendChild(n);
+      }
+      for (const c of svg.querySelectorAll('circle.tiny')) svg.appendChild(c);
+    }
+    confirmButton.disabled = !id;
+  }
+  function confirmSelection() {
+    if (!game || game.locked || !selected) return;
+    confirmButton.disabled = true;
+    answer(game.items.find((it) => it.id === selected) ?? { id: selected }, null);
+  }
 
   // The view is the visible map rectangle; its aspect ratio always matches the element.
   let view = { x: 0, y: 0, w: world.width };
@@ -348,7 +370,7 @@ async function pickerMap() {
       setTimeout(() => ring.remove(), 400);
       return;
     }
-    answer(game.items.find((it) => it.id === id) ?? { id }, null);
+    select(id);
   }
 
   pickMap = {
@@ -356,6 +378,7 @@ async function pickerMap() {
     reset() {
       cancelAnimationFrame(animation);
       for (const n of svg.querySelectorAll('.correct, .wrong')) n.classList.remove('correct', 'wrong');
+      select(null);
       svg.querySelectorAll('circle.miss').forEach((n) => n.remove());
       pointers.clear();
       gesture = null;
@@ -364,7 +387,13 @@ async function pickerMap() {
       setView(fullView());
     },
     // Colours the right (and a wrongly tapped) country and flies to the answer.
+    // What the timer submits when it runs out.
+    get selection() {
+      return selected && (game.items.find((it) => it.id === selected) ?? { id: selected });
+    },
     reveal(targetId, chosenId) {
+      confirmButton.disabled = true;
+      for (const n of svg.querySelectorAll('.selected')) n.classList.remove('selected');
       const mark = (id, cls) => {
         for (const n of svg.querySelectorAll(`[data-id="${id}"]`)) {
           n.classList.add(cls);
@@ -503,7 +532,7 @@ function startTimer() {
     bar.style.transform = `scaleX(${left / (seconds * 1000)})`;
     text.textContent = `${Math.ceil(left / 1000)} s`;
     timer.classList.toggle('urgent', left <= 3000);
-    if (left === 0) answer(null, null);
+    if (left === 0) answer(current.mode.answer === 'map' ? pickMap.selection : null, null);
     else current.timer = requestAnimationFrame(tick);
   };
   cancelAnimationFrame(current.timer);
@@ -545,7 +574,7 @@ function answer(choice, button) {
     if (game !== current) return;
     if (game.lives <= 0) endGame(false);
     else nextQuestion();
-  }, correct ? 800 : 1600);
+  }, correct ? 800 : game.mode.answer === 'map' ? 2200 : 1600); // the map needs a moment to fly to the answer
 }
 
 // --- Game over & highscores --------------------------------------------------
