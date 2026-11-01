@@ -126,6 +126,27 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .map path.target { fill: var(--highlight); }
 .map circle.marker { fill: none; stroke: var(--highlight); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 
+/* Land → Karte: small prompt, the map takes the rest of the screen. */
+#screen-game:has(.map-mode) { height: calc(100dvh - 32px); min-height: 0; }
+.question.compact { min-height: 0; padding: 8px 12px; }
+.prompt-flag-name { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.question .prompt-flag-name .flag { width: 64px; max-height: 48px; flex: none; }
+.question .prompt-flag-name .prompt-text { font-size: 1.4rem; text-align: left; }
+.answers.map-mode { flex: 1; min-height: 260px; display: flex; }
+.pick-map { position: relative; flex: 1; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--water); }
+.map.pick { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; }
+.map.pick:active { cursor: grabbing; }
+.map.pick path.bg { fill: color-mix(in srgb, var(--land) 55%, var(--water)); }
+.map.pick circle.tiny { fill: color-mix(in srgb, var(--land) 60%, transparent); stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map.pick .correct { fill: var(--correct); }
+.map.pick circle.tiny.correct { fill: color-mix(in srgb, var(--correct) 50%, transparent); stroke: var(--correct); stroke-width: 2.5; }
+.map.pick .wrong { fill: var(--wrong); }
+.map.pick circle.tiny.wrong { fill: color-mix(in srgb, var(--wrong) 50%, transparent); stroke: var(--wrong); stroke-width: 2.5; }
+.map.pick circle.miss { fill: none; stroke: var(--muted); stroke-width: 2; vector-effect: non-scaling-stroke; animation: miss 0.4s ease-out forwards; }
+@keyframes miss { to { opacity: 0; } }
+.zoom-buttons { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 8px; }
+.zoom-buttons .icon-button { box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); font-weight: 700; }
+
 .answers { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .answers.flags { grid-template-columns: 1fr 1fr; }
 .answers button {

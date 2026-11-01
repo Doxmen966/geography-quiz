@@ -13,6 +13,8 @@ const MODES = [
   { id: 'country-to-flag', icon: '🌍', title: 'Land → Flagge', hint: 'Welche Flagge gehört zum Land?', data: 'countries', prompt: 'name', answer: 'flag' },
   { id: 'country-to-capital', icon: '🏛️', title: 'Land → Hauptstadt', hint: 'Wie heißt die Hauptstadt?', data: 'countries', prompt: 'name', answer: 'capital' },
   { id: 'map-to-country', icon: '🗺️', title: 'Karte → Land', hint: 'Welches Land ist markiert?', data: 'countries', prompt: 'world-map', answer: 'name' },
+  // Searching on a world map takes longer than picking one of four buttons.
+  { id: 'country-to-map', icon: '📍', title: 'Land → Karte', hint: 'Tippe das Land auf der Weltkarte an.', data: 'countries', prompt: 'flag-name', answer: 'map', seconds: 20 },
   { id: 'state-to-capital', icon: '🏰', title: 'Bundesland → Hauptstadt', hint: 'Wie heißt die Landeshauptstadt?', data: 'states', prompt: 'name', answer: 'capital' },
   { id: 'germany-map-to-state', icon: '🇩🇪', title: 'Deutschlandkarte → Bundesland', hint: 'Welches Bundesland ist markiert?', data: 'states', prompt: 'germany-map', answer: 'name' },
 ];
@@ -126,6 +128,7 @@ async function renderPrompt(mode, item) {
   if (mode.prompt === 'flag') content = flagImg(item, 'Flagge');
   else if (mode.prompt === 'world-map') content = await worldMap(item);
   else if (mode.prompt === 'germany-map') content = await germanyMap(item);
+  else if (mode.prompt === 'flag-name') content = el('div', { className: 'prompt-flag-name' }, flagImg(item, 'Flagge'), el('div', { className: 'prompt-text', textContent: item.name }));
   else content = el('div', { className: 'prompt-text', textContent: item.name });
   box.replaceChildren(label, content);
 }
@@ -133,6 +136,254 @@ async function renderPrompt(mode, item) {
 function answerContent(mode, item) {
   if (mode.answer === 'flag') return flagImg(item, `Flagge`);
   return item[mode.answer];
+}
+
+// --- Interactive world map ("Land → Karte") ----------------------------------
+// One finger pans, two fingers (or the mouse wheel) zoom, a tap answers.
+
+const TAP_SLOP_PX = 10; // finger movement that still counts as a tap
+const TINY_TAP_RADIUS_PX = 11; // tap circle drawn around countries too small to hit
+const COAST_TOLERANCE_PX = 12; // a tap just off the coast still picks the nearest country
+const MIN_VIEW_WIDTH = 12; // map units, i.e. roughly 160x zoom
+const TINY_CIRCLES_MAX_VIEW = 600; // tap circles only appear once zoomed in, else they pile up
+
+let pickMap = null;
+async function pickerMap() {
+  if (pickMap) return pickMap;
+  const world = await load('world');
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.classList.add('map', 'pick');
+  svg.setAttribute('role', 'application');
+  svg.setAttribute('aria-label', 'Weltkarte: wischen zum Verschieben, mit zwei Fingern zoomen, Land antippen');
+  const countries = Object.entries(world.countries);
+  const tiny = countries.filter(([, c]) => Math.max(c.bounds[2] - c.bounds[0], c.bounds[3] - c.bounds[1]) < 10);
+  svg.innerHTML =
+    world.background.map((d) => `<path class="bg" d="${d}"/>`).join('') +
+    countries.map(([id, c]) => `<path data-id="${id}" d="${c.path}"/>`).join('') +
+    tiny.map(([id, c]) => `<circle class="tiny" data-id="${id}" cx="${(c.bounds[0] + c.bounds[2]) / 2}" cy="${(c.bounds[1] + c.bounds[3]) / 2}" r="0"/>`).join('');
+  const circles = [...svg.querySelectorAll('circle.tiny')].map((node) => {
+    const [x0, y0, x1, y1] = world.countries[node.dataset.id].bounds;
+    return { node, size: Math.max(x1 - x0, y1 - y0) };
+  });
+
+  const zoomButtons = el(
+    'div',
+    { className: 'zoom-buttons' },
+    el('button', { type: 'button', className: 'icon-button', textContent: '+', ariaLabel: 'Hineinzoomen', onclick: () => zoomBy(1 / 2) }),
+    el('button', { type: 'button', className: 'icon-button', textContent: '−', ariaLabel: 'Herauszoomen', onclick: () => zoomBy(2) }),
+    el('button', { type: 'button', className: 'icon-button', textContent: '⤢', ariaLabel: 'Ganze Welt zeigen', onclick: () => animateTo(fullView()) }),
+  );
+  const node = el('div', { className: 'pick-map' }, svg, zoomButtons);
+
+  // The view is the visible map rectangle; its aspect ratio always matches the element.
+  let view = { x: 0, y: 0, w: world.width };
+  const aspect = () => (svg.clientHeight || 1) / (svg.clientWidth || 1);
+  const scale = () => (svg.clientWidth || 1) / view.w; // screen px per map unit
+
+  function fullView() {
+    const w = Math.max(world.width, world.height / aspect());
+    return { x: (world.width - w) / 2, y: (world.height - w * aspect()) / 2, w };
+  }
+  function clamp(v) {
+    const full = fullView();
+    const w = Math.min(Math.max(v.w, MIN_VIEW_WIDTH), full.w);
+    const h = w * aspect();
+    // Keep the view's centre over the map.
+    const cx = Math.min(Math.max(v.x + w / 2, Math.min(w / 2, world.width / 2)), Math.max(world.width - w / 2, world.width / 2));
+    const cy = Math.min(Math.max(v.y + h / 2, Math.min(h / 2, world.height / 2)), Math.max(world.height - h / 2, world.height / 2));
+    return { x: cx - w / 2, y: cy - h / 2, w };
+  }
+
+  let frame = 0;
+  function render() {
+    frame = 0;
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.w * aspect()}`);
+    const s = scale();
+    const zoomedIn = view.w <= TINY_CIRCLES_MAX_VIEW;
+    for (const c of circles) {
+      // Once a country is big enough to hit on its own, its helper circle goes away.
+      const show = zoomedIn && c.size * s < TINY_TAP_RADIUS_PX * 2;
+      c.node.setAttribute('r', show ? TINY_TAP_RADIUS_PX / s : 0);
+    }
+  }
+  function setView(v) {
+    view = clamp(v);
+    frame ||= requestAnimationFrame(render);
+  }
+
+  function toMap(clientX, clientY) {
+    const r = svg.getBoundingClientRect();
+    return { x: view.x + (clientX - r.left) / scale(), y: view.y + (clientY - r.top) / scale() };
+  }
+  // Zooms by factor (<1 = in) keeping the map point under (clientX, clientY) in place.
+  function zoomAt(factor, clientX, clientY, base = view) {
+    const r = svg.getBoundingClientRect();
+    const s = (svg.clientWidth || 1) / base.w;
+    const px = base.x + (clientX - r.left) / s;
+    const py = base.y + (clientY - r.top) / s;
+    const w = Math.min(Math.max(base.w * factor, MIN_VIEW_WIDTH), fullView().w);
+    const k = w / base.w;
+    return { x: px - (px - base.x) * k, y: py - (py - base.y) * k, w };
+  }
+  function zoomBy(factor) {
+    const r = svg.getBoundingClientRect();
+    animateTo(clamp(zoomAt(factor, r.left + r.width / 2, r.top + r.height / 2)));
+  }
+
+  let animation = 0;
+  function animateTo(target, ms = 350) {
+    cancelAnimationFrame(animation);
+    const from = view;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / ms);
+      const e = 1 - (1 - t) ** 3;
+      // Interpolate the zoom geometrically so it feels even.
+      const w = from.w * (target.w / from.w) ** e;
+      const fcx = from.x + from.w / 2, fcy = from.y + (from.w * aspect()) / 2;
+      const tcx = target.x + target.w / 2, tcy = target.y + (target.w * aspect()) / 2;
+      const cx = fcx + (tcx - fcx) * e, cy = fcy + (tcy - fcy) * e;
+      view = { x: cx - w / 2, y: cy - (w * aspect()) / 2, w };
+      render();
+      if (t < 1) animation = requestAnimationFrame(step);
+    };
+    animation = requestAnimationFrame(step);
+  }
+
+  // Which country is at this screen point? Small misses next to a coast count
+  // for the closest country, so fingers don't have to be pixel-perfect.
+  function countryAt(clientX, clientY) {
+    const hit = (x, y) => {
+      const target = document.elementFromPoint(x, y);
+      return target && svg.contains(target) ? target.dataset.id : undefined;
+    };
+    const direct = hit(clientX, clientY);
+    if (direct) return direct;
+    for (const radius of [COAST_TOLERANCE_PX / 2, COAST_TOLERANCE_PX]) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const id = hit(clientX + Math.cos(a) * radius, clientY + Math.sin(a) * radius);
+        if (id) return id;
+      }
+    }
+    return undefined;
+  }
+
+  // --- Gestures ---
+  const pointers = new Map();
+  let gesture = null;
+  function startGesture() {
+    const pts = [...pointers.values()];
+    if (pts.length === 1) {
+      gesture = { type: 'pan', start: pts[0], base: view, tap: gesture?.type !== 'pinch' && !gesture?.moved };
+    } else if (pts.length >= 2) {
+      const [a, b] = pts;
+      gesture = { type: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, base: view };
+    }
+  }
+  svg.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    cancelAnimationFrame(animation);
+    svg.setPointerCapture(e.pointerId);
+    const first = pointers.size === 0;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (first) gesture = null;
+    startGesture();
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId) || !gesture) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...pointers.values()];
+    if (gesture.type === 'pan') {
+      const dx = pts[0].x - gesture.start.x;
+      const dy = pts[0].y - gesture.start.y;
+      if (Math.hypot(dx, dy) > TAP_SLOP_PX) gesture.tap = false;
+      if (gesture.tap) return;
+      const s = (svg.clientWidth || 1) / gesture.base.w;
+      setView({ x: gesture.base.x - dx / s, y: gesture.base.y - dy / s, w: gesture.base.w });
+    } else if (pts.length >= 2) {
+      const [a, b] = pts;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      // Zoom around the starting midpoint, then follow the fingers' movement.
+      const zoomed = zoomAt(gesture.dist / dist, gesture.mid.x, gesture.mid.y, gesture.base);
+      const s = (svg.clientWidth || 1) / zoomed.w;
+      setView({ x: zoomed.x - (mid.x - gesture.mid.x) / s, y: zoomed.y - (mid.y - gesture.mid.y) / s, w: zoomed.w });
+    }
+  });
+  const release = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const wasTap = e.type === 'pointerup' && pointers.size === 1 && gesture?.type === 'pan' && gesture.tap;
+    pointers.delete(e.pointerId);
+    if (wasTap) onTap(e.clientX, e.clientY);
+    if (pointers.size) {
+      // Lifting one finger of a pinch continues as a pan, never as a tap.
+      gesture = { type: 'pinch' };
+      startGesture();
+    }
+  };
+  svg.addEventListener('pointerup', release);
+  svg.addEventListener('pointercancel', release);
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    cancelAnimationFrame(animation);
+    setView(zoomAt(Math.exp(e.deltaY * 0.002), e.clientX, e.clientY));
+  }, { passive: false });
+  // Safari fires its own gesture events for pinches; keep it from zooming the page.
+  svg.addEventListener('gesturestart', (e) => e.preventDefault());
+  new ResizeObserver(() => setView(view)).observe(svg);
+
+  function onTap(clientX, clientY) {
+    if (!game || game.locked || game.mode.answer !== 'map') return;
+    const id = countryAt(clientX, clientY);
+    if (!id) {
+      // Water or an area that isn't part of the quiz: no penalty, just a hint.
+      const p = toMap(clientX, clientY);
+      const ring = document.createElementNS(SVG_NS, 'circle');
+      ring.classList.add('miss');
+      ring.setAttribute('cx', p.x);
+      ring.setAttribute('cy', p.y);
+      ring.setAttribute('r', 14 / scale());
+      svg.appendChild(ring);
+      setTimeout(() => ring.remove(), 400);
+      return;
+    }
+    answer(game.items.find((it) => it.id === id) ?? { id }, null);
+  }
+
+  pickMap = {
+    node,
+    reset() {
+      cancelAnimationFrame(animation);
+      for (const n of svg.querySelectorAll('.correct, .wrong')) n.classList.remove('correct', 'wrong');
+      svg.querySelectorAll('circle.miss').forEach((n) => n.remove());
+      pointers.clear();
+      gesture = null;
+      // Layout may not exist yet on the very first question.
+      requestAnimationFrame(() => setView(fullView()));
+      setView(fullView());
+    },
+    // Colours the right (and a wrongly tapped) country and flies to the answer.
+    reveal(targetId, chosenId) {
+      const mark = (id, cls) => {
+        for (const n of svg.querySelectorAll(`[data-id="${id}"]`)) {
+          n.classList.add(cls);
+          n.parentNode.appendChild(n);
+        }
+      };
+      if (chosenId && chosenId !== targetId) mark(chosenId, 'wrong');
+      mark(targetId, 'correct');
+      for (const c of svg.querySelectorAll('circle.tiny')) svg.appendChild(c);
+      if (chosenId === targetId) return;
+      // Frame the right answer, and the wrong tap too so both are visible.
+      const boxes = [targetId, chosenId].filter((id) => world.countries[id]).map((id) => world.countries[id].bounds);
+      const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
+      const x1 = Math.max(...boxes.map((b) => b[2])), y1 = Math.max(...boxes.map((b) => b[3]));
+      const w = Math.max((x1 - x0) * 1.6, ((y1 - y0) * 1.6) / aspect(), 120);
+      animateTo(clamp({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * aspect()) / 2, w }), 600);
+    },
+  };
+  return pickMap;
 }
 
 // --- Game ------------------------------------------------------------------
@@ -213,9 +464,19 @@ async function nextQuestion() {
   level.textContent = `Frage ${game.answered + 1} · ${DIFFICULTY_LABEL[item.difficulty]}`;
 
   await renderPrompt(game.mode, item);
+  if (game.mode.answer === 'map') {
+    const answers = $('answers');
+    answers.className = 'answers map-mode';
+    $('question').classList.add('compact');
+    const picker = await pickerMap();
+    picker.reset();
+    answers.replaceChildren(picker.node);
+    return startTimer();
+  }
   const options = shuffle([item, ...distractors(game, item)]);
   const answers = $('answers');
-  answers.classList.toggle('flags', game.mode.answer === 'flag');
+  answers.className = game.mode.answer === 'flag' ? 'answers flags' : 'answers';
+  $('question').classList.remove('compact');
   answers.replaceChildren(
     ...options.map((opt) => {
       const button = el('button', { type: 'button' }, answerContent(game.mode, opt));
@@ -231,14 +492,15 @@ async function nextQuestion() {
 // Countdown per question; running out counts as a wrong answer.
 function startTimer() {
   const current = game;
-  const deadline = performance.now() + QUESTION_SECONDS * 1000;
+  const seconds = current.mode.seconds ?? QUESTION_SECONDS;
+  const deadline = performance.now() + seconds * 1000;
   const bar = $('timer-bar');
   const text = $('timer-text');
   const timer = $('timer');
   const tick = () => {
     if (game !== current || current.locked) return;
     const left = Math.max(0, deadline - performance.now());
-    bar.style.transform = `scaleX(${left / (QUESTION_SECONDS * 1000)})`;
+    bar.style.transform = `scaleX(${left / (seconds * 1000)})`;
     text.textContent = `${Math.ceil(left / 1000)} s`;
     timer.classList.toggle('urgent', left <= 3000);
     if (left === 0) answer(null, null);
@@ -254,7 +516,8 @@ function answer(choice, button) {
   cancelAnimationFrame(game.timer);
   const correct = choice?.id === game.current.id;
   game.answered += 1;
-  for (const b of $('answers').children) {
+  if (game.mode.answer === 'map') pickMap.reveal(game.current.id, choice?.id);
+  else for (const b of $('answers').children) {
     b.disabled = true;
     if (b.dataset.id === game.current.id) b.classList.add('correct');
   }
