@@ -114,10 +114,13 @@ async function popularity(qids) {
 
 // --- Flags (Wikimedia Commons via Wikidata) ------------------------------
 
-// Current flag file of a Wikidata item: preferred rank first, statements with an end date skipped.
+// Current flag file of a Wikidata item: preferred rank first, otherwise the newest statement
+// without an end date (P582), ordered by start date (P580).
 function currentFlag(entity) {
-  const claims = (entity.claims?.P41 ?? []).filter((c) => c.rank !== 'deprecated' && c.mainsnak.datavalue && !c.qualifiers?.P582);
-  const best = claims.find((c) => c.rank === 'preferred') ?? claims[0];
+  const claims = (entity.claims?.P41 ?? []).filter((c) => c.rank !== 'deprecated' && c.mainsnak.datavalue);
+  const start = (c) => c.qualifiers?.P580?.[0]?.datavalue?.value.time ?? '';
+  const open = claims.filter((c) => !c.qualifiers?.P582).sort((a, b) => start(b).localeCompare(start(a)));
+  const best = claims.find((c) => c.rank === 'preferred') ?? open[0];
   return best?.mainsnak.datavalue.value;
 }
 
@@ -147,7 +150,10 @@ async function buildFlags(quiz) {
       const iso = entities[c.wikidata]?.claims?.P297?.[0]?.mainsnak.datavalue?.value;
       if (iso && iso.toLowerCase() !== c.iso2) throw new Error(`${c.id}: Wikidata ${c.wikidata} has ISO code ${iso}`);
       const file = currentFlag(entities[c.wikidata] ?? {});
-      if (!file?.toLowerCase().endsWith('.svg')) throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
+      if (!file?.toLowerCase().endsWith('.svg')) {
+        console.error(JSON.stringify(entities[c.wikidata]?.claims?.P41 ?? entities[c.wikidata] ?? null).slice(0, 4000));
+        throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
+      }
       files[c.iso2] = file;
     }
   }
