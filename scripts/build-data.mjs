@@ -130,14 +130,16 @@ const stripHtml = (s = '') => s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').tri
 function ensureViewBox(svg) {
   return svg.replace(/<svg\b[^>]*>/, (tag) => {
     if (/\sviewBox=/.test(tag)) return tag;
-    const w = tag.match(/\swidth="([\d.]+)(px)?"/)?.[1];
-    const h = tag.match(/\sheight="([\d.]+)(px)?"/)?.[1];
-    if (!w || !h) throw new Error('SVG without viewBox and size');
-    return tag.replace('<svg', `<svg viewBox="0 0 ${w} ${h}"`);
+    // Only the ratio matters, so units (px, pt, mm, ...) can be dropped as long as both use the same.
+    const size = (attr) => tag.match(new RegExp(`\\s${attr}=["']\\s*([\\d.]+(?:e[+-]?\\d+)?)\\s*([a-z]*)\\s*["']`, 'i'));
+    const [, w, wu] = size('width') ?? [];
+    const [, h, hu] = size('height') ?? [];
+    if (!w || !h || wu !== hu) throw new Error(`SVG without viewBox and usable size: ${tag.slice(0, 300)}`);
+    return tag.replace('<svg', `<svg viewBox="0 0 ${Number(w)} ${Number(h)}"`);
   });
 }
 
-async function buildFlags(quiz) {
+async function buildFlags(quiz, flagOverrides) {
   // 1. Flag file names from Wikidata (property P41 "flag image"). One request per country:
   //    wbgetentities with many full country entities exceeds the API's result size limit.
   const files = {};
@@ -155,7 +157,8 @@ async function buildFlags(quiz) {
       console.error(JSON.stringify(claims.P41 ?? null).slice(0, 4000));
       throw new Error(`${c.id}: no SVG flag on Wikidata ${c.wikidata} (${file})`);
     }
-    files[c.iso2] = file;
+    files[c.iso2] = flagOverrides[c.iso2] ?? file;
+    if (flagOverrides[c.iso2]) console.log(`${c.id}: flag override ${flagOverrides[c.iso2]} (Wikidata: ${file})`);
   }
 
   // 2. Download URL, licence and author from the Commons API.
@@ -188,6 +191,7 @@ async function buildFlags(quiz) {
   await fs.rm(FLAGS_OUT, { recursive: true, force: true });
   await fs.mkdir(FLAGS_OUT, { recursive: true });
   const credits = {};
+  const failures = [];
   for (const [iso2, file] of Object.entries(files)) {
     const meta = info[file] ?? info[file.replace(/_/g, ' ')];
     if (!meta) throw new Error(`Commons: no info for ${file}`);
@@ -206,10 +210,17 @@ async function buildFlags(quiz) {
       await fs.writeFile(`${cacheFile}.json`, JSON.stringify({ url: meta.url }));
       await new Promise((r) => setTimeout(r, 200));
     }
-    const { data } = optimize(ensureViewBox(svg), { multipass: true, plugins: ['preset-default'] });
-    await fs.writeFile(path.join(FLAGS_OUT, `${iso2}.svg`), data);
+    try {
+      const { data } = optimize(ensureViewBox(svg), { multipass: true, plugins: ['preset-default'] });
+      await fs.writeFile(path.join(FLAGS_OUT, `${iso2}.svg`), data);
+    } catch (err) {
+      failures.push(`${iso2} (${file}): ${err.message}`);
+      continue;
+    }
     credits[iso2] = { file, page: meta.page, license: meta.license, artist: meta.artist };
   }
+  // Report every broken flag at once instead of failing on the first one.
+  if (failures.length) throw new Error(`Flags failed:\n${failures.join('\n')}`);
   await fs.mkdir(OUT, { recursive: true });
   await fs.writeFile(path.join(OUT, 'flags.json'), JSON.stringify(credits, null, 1));
 }
@@ -319,7 +330,7 @@ async function main() {
   assignDifficulty(bundeslaender, overrides.bundeslaender);
 
   // Flags
-  if (!OFFLINE) await buildFlags(quiz);
+  if (!OFFLINE) await buildFlags(quiz, JSON.parse(await fs.readFile(path.join(ROOT, 'data', 'flag-overrides.json'), 'utf8')));
 
   // Output
   const write = (name, data) => fs.writeFile(path.join(OUT, name), JSON.stringify(data, null, name === 'world.json' || name === 'germany.json' ? 0 : 1));

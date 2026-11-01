@@ -7,10 +7,12 @@ on:
     paths:
       - scripts/build-data.mjs
       - data/difficulty-overrides.json
+      - data/flag-overrides.json
       - .github/workflows/data.yml
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build-data:
@@ -24,6 +26,7 @@ jobs:
       - run: npm ci
       - run: node scripts/build-data.mjs
       - name: Commit changes
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -31,3 +34,10 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "Quizdaten aktualisieren"
           git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      # Pushes made with GITHUB_TOKEN don't trigger other workflows, so start the image build explicitly.
+      - name: Rebuild Docker image
+        if: steps.commit.outputs.pushed == 'true' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docker.yml --ref main
